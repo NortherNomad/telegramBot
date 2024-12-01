@@ -1,9 +1,13 @@
-from almau import settings
+import os
+import django
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'almau.settings')
+django.setup()
+
 import telebot
-
+from almau import settings
 from app.schemas import CreateProductIn
-from .models import Product
-
+from app.models import Product
 
 bot = telebot.TeleBot(settings.BOT_TOKEN)
 
@@ -52,3 +56,9 @@ def get_products(message: telebot.types.Message):
         name=params.name
     )
     bot.send_message(message.from_user.id, "Product was created")
+    
+def main():
+     bot.infinity_polling()
+     
+if __name__ == "__main__":
+     main()
