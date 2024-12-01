@@ -6,7 +6,6 @@ django.setup()
 
 import telebot
 from almau import settings
-from app.schemas import CreateProductIn
 from app.models import Product
 
 bot = telebot.TeleBot(settings.BOT_TOKEN)
@@ -19,7 +18,7 @@ def send_welcome(message):
 
 @bot.message_handler(commands=['help'])
 def help_command(message):
-	bot.reply_to(message, f"Get list of products: /products \nCreate product: /create_product <quantity> <price> <name>")
+	bot.reply_to(message, f"Get list of products: /products \nCreate product: /create_product")
 
 
 @bot.message_handler(commands=['products'])
@@ -35,28 +34,51 @@ def get_products(message):
 
 
 @bot.message_handler(commands=['create_product'])
-def get_products(message: telebot.types.Message):
-    text = message.text.split()
-    if len(text) < 4:
-        bot.send_message(message.from_user.id, "Fill all necessary data to create product")
+def start_create_product(message: telebot.types.Message):
+    msg = bot.send_message(message.from_user.id, 'type product name')
+    bot.register_next_step_handler(msg, get_product_name, {})
+
+def get_product_name(message: telebot.types.Message, product_data: dict):
+    product_data['name'] = message.text
+    if not product_data['name']:
+        msg = bot.send_message(message.from_user.id, 'Product name can not be empty. Try again:')
+        bot.register_next_step_handler(msg, get_product_name, product_data)
         return
+    msg = bot.send_message(message.from_user.id, 'type product quantity')
+    bot.register_next_step_handler(msg, get_product_quantity, product_data)
+    
+def get_product_quantity(message: telebot.types.Message, product_data: dict):
     try:
-        params = CreateProductIn(quantity=text[1], price=text[2], name=" ".join(text[3:]))
-    except:
-        bot.send_message(message.from_user.id, "Quantity and price must be numbers")
+          product_data['quantity'] = int(message.text)
+          if product_data['quantity'] < 0:
+               raise ValueError
+    except ValueError:
+        msg = bot.send_message(message.from_user.id, "Invalid quantity. Please type a valid positive integer:")
+        bot.register_next_step_handler(msg, get_product_quantity, product_data)
+        return
+    
+    msg = bot.send_message(message.from_user.id, 'type product price')
+    bot.register_next_step_handler(msg, get_product_price, product_data)
+    
+
+def get_product_price(message: telebot.types.Message, product_data: dict):
+    try:
+        product_data['price'] = float(message.text.strip())
+        if product_data['price'] <= 0:
+            raise ValueError
+    except ValueError:
+        msg = bot.send_message(message.from_user.id, "Invalid price. Please type a valid positive integer:")
+        bot.register_next_step_handler(msg, get_product_price, product_data)
         return
 
-    if Product.objects.filter(quantity=params.quantity, price=params.price, name=params.name).exists():
+    if Product.objects.filter(**product_data).exists():
         bot.send_message(message.from_user.id, "Product already exists")
         return
 
-    Product.objects.create(
-        quantity=params.quantity,
-        price=params.price,
-        name=params.name
-    )
-    bot.send_message(message.from_user.id, "Product was created")
-    
+    Product.objects.create(**product_data)
+    bot.send_message(message.from_user.id, 'product created')
+
+
 def main():
      bot.infinity_polling()
      
